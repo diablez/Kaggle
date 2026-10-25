@@ -42,7 +42,7 @@ The audit validates CSV/image correspondence, opens every image, reports dimensi
 .\.venv\Scripts\python.exe scripts\train.py --epochs 10 --batch-size 32
 ```
 
-The split is stratified 80/20 with seed 42. Training uses random resized crop, horizontal flip, light colour jitter, ImageNet normalization, cross-entropy loss, AdamW, validation-loss scheduling, early stopping, and best-checkpoint selection. The validation path uses deterministic resize and centre crop. On a CPU-only machine, a faster first baseline can train only the new classifier head:
+The split is stratified 80/20 with seed 42. When the audit report exists, exact duplicate-content groups are kept wholly in either training or validation to prevent leakage. Training uses random resized crop, horizontal flip, light colour jitter, ImageNet normalization, cross-entropy loss, AdamW, validation-loss scheduling, early stopping, and best-checkpoint selection. The validation path uses deterministic resize and centre crop. On a CPU-only machine, a faster first baseline can train only the new classifier head:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\train.py --freeze-backbone --epochs 5 --batch-size 32

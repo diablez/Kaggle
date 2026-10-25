@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedGroupKFold, train_test_split
 from torch.utils.data import Dataset
 from torchvision import transforms
 
@@ -42,7 +42,25 @@ def load_labels(path: Path) -> pd.DataFrame:
     return frame
 
 
-def make_split(frame: pd.DataFrame, validation_fraction: float, seed: int):
+def make_split(frame: pd.DataFrame, validation_fraction: float, seed: int, duplicate_groups=None):
+    if duplicate_groups:
+        folds = round(1 / validation_fraction)
+        if not np.isclose(validation_fraction, 1 / folds):
+            raise ValueError("Duplicate-aware splitting requires validation_fraction to be a reciprocal integer")
+        group_by_file = {}
+        for group_number, filenames in enumerate(duplicate_groups):
+            for filename in filenames:
+                group_by_file[filename] = f"duplicate-{group_number}"
+        groups = [
+            group_by_file.get(image_filename(image_id), f"unique-{image_filename(image_id)}")
+            for image_id in frame["image_id"]
+        ]
+        splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=seed)
+        train_indices, validation_indices = next(splitter.split(frame, frame["class"], groups))
+        return (
+            frame.iloc[train_indices].reset_index(drop=True),
+            frame.iloc[validation_indices].reset_index(drop=True),
+        )
     train, validation = train_test_split(
         frame,
         test_size=validation_fraction,

@@ -47,6 +47,7 @@ def parse_args():
     parser.add_argument("--max-validation-samples", type=int)
     parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--freeze-backbone", action="store_true")
+    parser.add_argument("--audit-report", type=Path, default=ROOT / "artifacts" / "audit" / "dataset_report.json")
     return parser.parse_args()
 
 
@@ -88,7 +89,13 @@ def main():
     if len(classes) != 8:
         raise ValueError(f"Expected 8 classes, found {len(classes)}: {classes}")
     class_to_index = {name: index for index, name in enumerate(classes)}
-    train_frame, validation_frame = make_split(labels, args.validation_fraction, args.seed)
+    duplicate_groups = None
+    if args.audit_report.exists():
+        audit = json.loads(args.audit_report.read_text(encoding="utf-8"))
+        duplicate_groups = audit.get("duplicate_train_content_groups")
+    train_frame, validation_frame = make_split(
+        labels, args.validation_fraction, args.seed, duplicate_groups=duplicate_groups
+    )
     if args.max_train_samples:
         per_class = max(1, args.max_train_samples // len(classes))
         train_frame = pd.concat(

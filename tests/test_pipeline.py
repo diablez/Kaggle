@@ -23,6 +23,15 @@ def test_stratified_split_is_deterministic():
     assert first[1]["class"].value_counts().to_dict() == {"a": 4, "b": 4}
 
 
+def test_duplicate_aware_split_keeps_identical_images_together():
+    frame = pd.DataFrame(
+        {"image_id": [str(i) for i in range(40)], "class": ["a"] * 20 + ["b"] * 20}
+    )
+    train, validation = make_split(frame, 0.2, 42, duplicate_groups=[["00001.jpg", "00002.jpg"]])
+    train_ids, validation_ids = set(train["image_id"]), set(validation["image_id"])
+    assert {"1", "2"}.issubset(train_ids) or {"1", "2"}.issubset(validation_ids)
+
+
 def test_transform_and_model_shapes():
     from PIL import Image
 

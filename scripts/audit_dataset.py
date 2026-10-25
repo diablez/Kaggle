@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -16,20 +17,33 @@ sys.path.insert(0, str(ROOT / "src"))
 from enge707.data import image_filename, load_labels  # noqa: E402
 
 
-def inspect_images(paths):
+def inspect_one(path, hash_content):
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        with Image.open(path) as image:
+            image_format = image.format or "UNKNOWN"
+            dimensions = f"{image.width}x{image.height}"
+        digest = hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest() if hash_content else None
+        return path.name, image_format, dimensions, digest, None
+    except (OSError, UnidentifiedImageError) as error:
+        return path.name, None, None, None, {"file": str(path), "error": str(error)}
+
+
+def inspect_images(paths, workers, hash_content):
     formats, dimensions, corrupt = Counter(), Counter(), []
     digests = defaultdict(list)
-    for path in paths:
-        try:
-            with Image.open(path) as image:
-                image.verify()
-            with Image.open(path) as image:
-                formats[image.format or "UNKNOWN"] += 1
-                dimensions[f"{image.width}x{image.height}"] += 1
-            digest = hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
-            digests[digest].append(path.name)
-        except (OSError, UnidentifiedImageError) as error:
-            corrupt.append({"file": str(path), "error": str(error)})
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for name, image_format, size, digest, error in executor.map(
+            lambda path: inspect_one(path, hash_content), paths
+        ):
+            if error:
+                corrupt.append(error)
+                continue
+            formats[image_format] += 1
+            dimensions[size] += 1
+            if digest:
+                digests[digest].append(name)
     duplicate_groups = [names for names in digests.values() if len(names) > 1]
     return formats, dimensions, corrupt, duplicate_groups
 
@@ -39,6 +53,7 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "artifacts" / "audit")
     parser.add_argument("--skip-hashes", action="store_true")
+    parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
     labels = load_labels(args.data_dir / "train_labels.csv")
     sample = pd.read_csv(args.data_dir / "sample_submission.csv", dtype={"image_id": str, "class": str})
@@ -48,8 +63,12 @@ def main():
     expected_test = {image_filename(value) for value in sample["image_id"]}
     actual_train, actual_test = {p.name for p in train_paths}, {p.name for p in test_paths}
 
-    train_formats, train_dimensions, train_corrupt, train_duplicates = inspect_images(train_paths)
-    test_formats, test_dimensions, test_corrupt, test_duplicates = inspect_images(test_paths)
+    train_formats, train_dimensions, train_corrupt, train_duplicates = inspect_images(
+        train_paths, args.workers, not args.skip_hashes
+    )
+    test_formats, test_dimensions, test_corrupt, test_duplicates = inspect_images(
+        test_paths, args.workers, not args.skip_hashes
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     classes = sorted(labels["class"].unique().tolist())
     report = {
