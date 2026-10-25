@@ -1,0 +1,28 @@
+# Local Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Local editor settings (except the shared interpreter recommendation)
+.vscode/*
+!.vscode/settings.json
+
+# Competition data and credentials
+data/
+kaggle.json
+.env
+.env.*
+
+# Models, generated outputs, and large experiment artifacts
+artifacts/
+outputs/
+checkpoints/
+runs/
+*.pt
+*.pth
+*.ckpt
+submission.csv
+
